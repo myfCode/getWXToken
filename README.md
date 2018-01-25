@@ -1,6 +1,10 @@
 # getWXToken
-1、运行
-在命令行中执行start.bat脚本
-2、配置
-start.bat是配置的环境变量
-3、启动一个node服务，获取token
+#本服务是用来获取微信服务的access_token,ticket
+# 流程如图： http ------> access_token ------> ticket ------> signature ------> 分享功能
+#1、启动
+node app.js
+
+#备注：
+#1、可以同时获取多个公众号的token、ticket
+#    在wxTicketList中push即可；
+#2、token、ticket存在redis中
