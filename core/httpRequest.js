@@ -35,14 +35,46 @@ module.exports = function(postData) {
                 if (res.statusCode == 200) {
                     var data = Buffer.concat(chunks, size);
                     var info = JSON.parse(data.toString());
-                    resolve(info);
+
+                    if (sub === 'ticket/getticket' && Object.prototype.toString.call(info) === "[object Object]" && info.errmsg !== 'ok') { //获取ticket失败
+                        util.logger({
+                            process: sub,
+                            postData: _postData,
+                            result: info
+                        })
+                        reject(info);
+                    } else if (sub === 'token' && Object.prototype.toString.call(info) === "[object Object]" && !info.access_token && !info.expires_in) { //获取token失败
+                        util.logger({
+                            process: sub,
+                            postData: _postData,
+                            result: info
+                        })
+                        reject(info)
+                    } else {
+                        util.logger({
+                            process: sub,
+                            postData: _postData,
+                            result: info
+                        })
+                        resolve(info);
+                    }
                 } else {
+                    util.logger({
+                        process: sub,
+                        postData: _postData,
+                        result: res.statusCode
+                    })
                     reject('Error: during' + errPlace + ' ' + res.statusCode);
                 }
             });
         });
 
         req.on('error', function(e) {
+            util.logger({
+                process: sub,
+                postData: _postData,
+                result: e.toString
+            })
             reject('Error: during ' + errPlace + ' ' + e.toString());
         });
 

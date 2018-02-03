@@ -1,66 +1,121 @@
-var Promise = require('promise');
 var getWxToken = require('./getWxToken.js');
 var httpRequest = require('./httpRequest.js');
 var util = require('./util.js');
-var Redis = require('ioredis');
-var client = new Redis.Cluster(eval(process.env.REDIS_URL));
+var client = require('./client.js');
 
-var reGetWxTicket = function(expiresIn, options) {
-    //设置提前缓冲时间
-    var buff = 180;
-    setTimeout(function() {
-        getWxTicket(options);
-    }, expiresIn * 1000 - buff * 1000);
-}
 
-var sendRequestForTicket = function(access_token, options) {
-    var postData = {
-        access_token: access_token,
-        type: 'jsapi'
-    }
-    httpRequest(postData).then(
-        function(result) {
-            //打印日志
-            util.loggerInTerminal(result);
-            //存储数据
-            client.set(options.ticket, result.ticket);
+var GetWxTicket = function(options) {
+    var self = this;
 
-            //重新获取ticket
-            reGetWxTicket(result.expires_in, options);
-        }
-    ).catch(
-        function(err) {
-            console.log(err);
-            setTimeout(function() {
-                getWxTicket(options);
-            }, 1000)
-        }
-    );
-}
+    this.options = options;
 
-var getWxTicket = function(options) {
-    client.get(options.accessToken, function(err, reply) {
-        if (err) {
-            console.log(err);
-            return;
-        }
+    this.tokenTimer = null;
+    this.ticketTimer = null;
 
-        if (!reply) {
-            getWxToken(options).then(
-                function(result) {
-                    sendRequestForTicket(result, options);
-                }
-            ).catch(function(err) {
+    //初始方法
+    this.init = function() {
+        self.client.get(self.options.accessToken, function(err, reply) {
+            if (err) {
                 console.log(err);
-                setTimeout(function() {
-                    getWxTicket(options);
-                }, 1000)
-            })
-            return;
-        }
+                return;
+            }
 
-        sendRequestForTicket(reply, options);
-    })
+            if (!reply) {
+                self._getWxToken();
+                return;
+            }
+
+            self.sendRequestForTicket(reply);
+        })
+    }
+
+    //获取微信accessToken
+    this._getWxToken = function() {
+        self.getWxToken(self.options).then(
+            function(result) {
+                //在终端打印日志
+                self.util.loggerInTerminal(result);
+
+                //过期时间，毫秒数
+                var expiresTime = self.calculateTime(result.expires_in, self.util.tokenBufferTime);
+
+                //缓存accessToken
+                self.client.set(self.options.accessToken, result.access_token, function() {
+                    //设置到期刷新时间
+                    self.client.set(self.options.expiresTime, self.util.addSeconds(expiresTime).format('yyyy-MM-dd hh:mm:ss'));
+                });
+
+                //设置重新accessToken定时
+                self.reGetWxToken(expiresTime);
+
+                //根据accessToken获取ticket
+                self.sendRequestForTicket(result.access_token);
+            },
+            function(err) {
+                console.log(err);
+                //从新获取accessToken
+                self.reGetWxToken();
+            }
+        )
+    }
+
+
+    //重新获取accessToken
+    this.reGetWxToken = function(time) {
+        if (self.tokenTimer) clearTimeout(self.tokenTimer);
+        self.tokenTimer = setTimeout(function() {
+            self._getWxToken()
+        }, time || 1000)
+    }
+
+    //获取ticket
+    this.sendRequestForTicket = function(access_token) {
+        var postData = {
+            access_token: access_token,
+            type: 'jsapi'
+        }
+        self.httpRequest(postData).then(
+            function(result) {
+                //打印日志
+                self.util.loggerInTerminal(result);
+
+                //存储数据
+                self.client.set(self.options.ticket, result.ticket);
+
+                //重新获取ticket
+                self.reGetWxTicket(self.calculateTime(result.expires_in, self.util.ticketBufferTime));
+
+            },
+            function(err) {
+                console.log(err);
+
+                if (Object.prototype.toString.call(err) === "[object Object]" && err.errmsg !== 'ok') self.clearToken(self.options.accessToken);
+
+                self.reGetWxTicket();
+            }
+        )
+    }
+
+    //重新获取ticket
+    this.reGetWxTicket = function(time) {
+        if (self.ticketTimer) clearTimeout(self.ticketTimer);
+        self.ticketTimer = setTimeout(function() {
+            self.init();
+        }, time || 1000)
+    }
 }
 
-module.exports = getWxTicket;
+GetWxTicket.prototype = {
+    client: client,
+    httpRequest: httpRequest,
+    getWxToken: getWxToken,
+    util: util,
+    calculateTime: function(expiresTime, bufferTime) {
+        return expiresTime * 1000 - bufferTime;
+    },
+    clearToken: function(accessToken) {
+        this.client.set(accessToken, null);
+    }
+}
+
+module.exports = GetWxTicket;

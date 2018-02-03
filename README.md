@@ -6,5 +6,5 @@ node app.js
 
 #备注：
 #1、可以同时获取多个公众号的token、ticket
-#    在wxTicketList中push即可；
+#在wxTicketList中push即可；
 #2、token、ticket存在redis中

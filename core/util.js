@@ -1,3 +1,6 @@
+var fs = require('fs');
+var path = require('path');
+
 //日期格式化
 Date.prototype.format = function(format) { //日期格式化
     var o = {
@@ -42,7 +45,18 @@ var util = {
         var now = new Date();
         console.log(now.format('yyyy-MM-dd hh:mm:ss'));
         console.log(info);
-    }
+    },
+    tokenBufferTime: 5 * 60 * 1000,
+    ticketBufferTime: 4 * 60 * 1000 ,
+    logger: function(info){
+        var today = new Date();
+        var filename =  path.resolve(__dirname, '../logger') +'/' + today.format('yyyy-MM-dd') + '.log';
+        fs.appendFile(filename, today.format('yyyy-MM-dd hh:mm:ss') 
+            + '\n' + info.process
+            + '\npostData:   ' + info.postData 
+            + '\nresult:   ' + JSON.stringify(info.result)
+            + '\n\n')
+        }
 }
 
 module.exports = util;
